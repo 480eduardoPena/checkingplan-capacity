@@ -1,0 +1,12 @@
+node_modules
+dist
+.DS_Store
+*.log
+
+# never commit secrets
+server/.env
+.env
+.env.local
+
+# Claude Code local config
+.claude/

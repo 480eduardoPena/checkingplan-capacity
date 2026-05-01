@@ -144,11 +144,112 @@ El backend cachea el `access_token` en memoria y lo refresca automáticamente cu
 ## Compilar para producción
 
 ```bash
-npm run build      # genera /dist
+npm run build      # genera /dist (incluye web.config para IIS)
 npm run preview    # sirve /dist en local para probar
 ```
 
-Para desplegar en serio: el frontend (`/dist`) lo puedes servir con cualquier static host (Nginx, Vercel, S3+CloudFront…), y el backend (`/server`) en cualquier sitio que ejecute Node (Render, Fly.io, Railway, una VM…). Ajusta entonces el proxy de Vite o configura `VITE_API_URL` y reescribe el `fetch` del frontend en consecuencia.
+---
+
+## Despliegue en IIS (Windows Server 2016)
+
+La app se despliega como subcarpeta `/checkingplan-capacity/` de un sitio IIS existente. El frontend se sirve como archivos estáticos y las llamadas a `/api/*` se redirigen al backend Node mediante URL Rewrite.
+
+### Requisitos previos
+
+- **Node.js 18+** instalado en el servidor
+- **IIS URL Rewrite 2.1** instalado ([iis.net](https://www.iis.net/downloads/microsoft/url-rewrite))
+- **IIS Application Request Routing (ARR) 3.0** instalado ([iis.net](https://www.iis.net/downloads/microsoft/application-request-routing))
+- ARR habilitado: IIS Manager → nodo raíz → **Application Request Routing Cache** → **Server Proxy Settings** → marcar **Enable proxy** → Apply
+
+### 1. Preparar archivos en el servidor
+
+Copia el proyecto al servidor (sin `node_modules` ni `dist`). Luego en PowerShell:
+
+```powershell
+# Instalar dependencias del frontend y compilar
+npm install
+npm run build          # genera dist/ con web.config incluido
+
+# Instalar dependencias del backend
+cd server
+npm install
+
+# Configurar variables de entorno
+copy .env.example .env
+notepad .env           # rellenar con credenciales Zoho
+```
+
+### 2. Configurar IIS
+
+En IIS Manager:
+
+1. Clic derecho sobre la carpeta `checkingplan-capacity` → **Convert to Application**
+2. **Application Pool**: asignar un pool con **.NET CLR version = No Managed Code** (evita que el pipeline ASP.NET del sitio padre interfiera)
+3. **Physical path**: apuntar a la carpeta `dist/` generada por el build
+
+El archivo `dist/web.config` (incluido automáticamente en el build) gestiona:
+- Proxy de `/api/*` → Node.js en puerto 3001
+- Fallback SPA para rutas del frontend
+
+### 3. Instalar Node como servicio de Windows (con pm2)
+
+Para que el backend arranque automáticamente con el servidor, ejecutar en **PowerShell como Administrador**:
+
+```powershell
+# Reubicar npm global a una carpeta accesible por SYSTEM
+New-Item -ItemType Directory -Force "C:\npm"
+npm config set prefix "C:\npm"
+[Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";C:\npm", "Machine")
+$env:PATH = $env:PATH + ";C:\npm"
+
+# Instalar pm2 y pm2-windows-service en la nueva ubicación
+npm install -g pm2 pm2-windows-service
+
+# Carpeta de datos pm2 accesible por SYSTEM
+New-Item -ItemType Directory -Force "C:\pm2"
+[Environment]::SetEnvironmentVariable("PM2_HOME", "C:\pm2", "Machine")
+$env:PM2_HOME = "C:\pm2"
+
+# Arrancar el backend y guardar la lista de procesos
+cd C:\...\checkingplan-capacity\server
+pm2 start .\index.js --name checkingplan-capacity
+pm2 save
+
+# Registrar como servicio de Windows
+pm2-service-install -n PM2
+```
+
+Durante la instalación del servicio responder:
+- `PM2_HOME value` → `C:\pm2`
+- `Set PM2_SERVICE_SCRIPTS` → dejar vacío
+- `PM2_SERVICE_PM2_DIR` → `C:\npm\node_modules\pm2\index.js`
+
+El servicio **PM2** aparecerá en `services.msc` con inicio automático.
+
+### Gestión del servicio
+
+```powershell
+# Ver estado del proceso Node
+pm2 list
+pm2 logs checkingplan-capacity   # logs en tiempo real
+
+# Reiniciar el backend (tras cambios en .env, por ejemplo)
+pm2 restart checkingplan-capacity
+
+# Estado del servicio Windows
+Get-Service PM2
+```
+
+### Verificar que todo funciona
+
+```
+GET http://TU_SERVIDOR/checkingplan-capacity/api/health
+```
+
+Respuesta esperada:
+```json
+{ "ok": true, "mode": "zoho", "portal_id": "20059477103", "dc": "eu" }
+```
 
 ---
 

@@ -25,6 +25,11 @@
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const DIST = join(__dirname, "../dist");
 
 const app = express();
 app.use(cors());
@@ -190,6 +195,10 @@ app.get("/api/zoho-tasks", async (req, res) => {
     res.status(e.statusCode || 500).json({ error: e.message });
   }
 });
+
+// Serve React frontend (must be after API routes)
+app.use(express.static(DIST));
+app.get("*", (req, res) => res.sendFile(join(DIST, "index.html")));
 
 app.listen(PORT, () => {
   console.log(`✓ Backend listening on http://localhost:${PORT}`);

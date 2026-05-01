@@ -205,7 +205,7 @@ const saveData = async (data) => {
  */
 const fetchOpenTasksForProgrammer = async (email) => {
   const response = await fetch(
-    `/api/zoho-tasks?email=${encodeURIComponent(email)}`
+    `api/zoho-tasks?email=${encodeURIComponent(email)}`
   );
   if (!response.ok) {
     let msg = `Backend ${response.status}`;

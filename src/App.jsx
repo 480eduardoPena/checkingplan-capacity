@@ -210,12 +210,14 @@ const fetchOpenTasksForProgrammer = async (email) => {
   if (!response.ok) {
     let msg = `Backend ${response.status}`;
     try {
-      const j = await response.json();
-      if (j.error) msg += `: ${j.error}`;
-    } catch {
       const t = await response.text();
-      msg += `: ${t.slice(0, 160)}`;
-    }
+      try {
+        const j = JSON.parse(t);
+        if (j.error) msg += `: ${j.error}`;
+      } catch {
+        if (t) msg += `: ${t.slice(0, 160)}`;
+      }
+    } catch {}
     throw new Error(msg);
   }
   return response.json(); // {tasks: [...]}
@@ -1030,7 +1032,7 @@ const SmallStat = ({ label, value, sub, highlight = false }) => (
 
 export default function App() {
   const [data, setData] = useState(null);
-  const [tab, setTab] = useState("params"); // params | calc
+  const [tab, setTab] = useState("calc"); // params | calc
 
   useEffect(() => {
     loadData().then(setData);

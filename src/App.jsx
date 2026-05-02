@@ -838,6 +838,15 @@ const CalculadoraScreen = ({ data }) => {
         <p className="text-sm mt-1" style={{ color: C.mute }}>
           Estima fecha de inicio, programadores asignables y plazo de entrega para una nueva tarea.
         </p>
+        <div className="mt-3 flex gap-2 px-3 py-2 rounded-lg text-xs w-fit" style={{ background: C.greenSoft, color: C.mute }}>
+          <AlertCircle size={13} className="flex-shrink-0 mt-0.5" style={{ color: C.greenDark }} />
+          <span>
+            La ocupación de cada programador se calcula a partir de sus tareas en Zoho Projects con estado{" "}
+            <strong style={{ color: C.ink }}>Pendiente</strong> o{" "}
+            <strong style={{ color: C.ink }}>En curso</strong>.
+            La fecha de inicio estimada es el día siguiente a la tarea con la fecha de fin más tardía.
+          </span>
+        </div>
       </div>
 
       {/* INPUT FORM */}

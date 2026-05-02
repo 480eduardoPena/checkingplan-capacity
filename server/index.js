@@ -155,15 +155,19 @@ async function fetchZohoTasks(email) {
     throw e;
   }
 
-  // Zoho returns tasks where the email matches as owner OR informador,
-  // depending on filter version. Re-filter strictly by owner.
+  // Keep only tasks in "Pendiente" (open) or "En curso" (inprogress) status.
+  // status.type is a system field independent of the portal language.
+  const ACTIVE_TYPES = new Set(["open", "inprogress"]);
+
   const lower = email.toLowerCase();
   return (j.tasks || [])
-    .filter((t) =>
-      (t?.owners_and_work?.owners || []).some(
+    .filter((t) => {
+      const statusType = (t?.status?.type || "").toLowerCase();
+      if (!ACTIVE_TYPES.has(statusType)) return false;
+      return (t?.owners_and_work?.owners || []).some(
         (o) => (o.email || "").toLowerCase() === lower
-      )
-    )
+      );
+    })
     .map((t) => ({
       name: t.name || "",
       end_date: t.end_date ? String(t.end_date).slice(0, 10) : null,

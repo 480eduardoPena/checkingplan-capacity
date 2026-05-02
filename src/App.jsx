@@ -14,6 +14,8 @@ import {
   Sparkles,
   Briefcase,
   RefreshCw,
+  Trash2,
+  Pencil,
 } from "lucide-react";
 import {
   BarChart,
@@ -53,6 +55,7 @@ const DEFAULT_DATA = {
       name: "Ricardo Cruz",
       zoho_zpuid: "5125000004360033",
       email: "ricardo.cruz@cuatroochenta.com",
+      permanent: true,
       skills: { sql: true, net45: true, android: true, reactjs: false, reactnative: false, flutter: false },
       capacity_ckp: 59,
       capacity_otros: 43,
@@ -62,6 +65,7 @@ const DEFAULT_DATA = {
       name: "Eduardo Peña",
       zoho_zpuid: "5125000004207087",
       email: "eduardo.pena@cuatroochenta.com",
+      permanent: true,
       skills: { sql: true, net45: true, android: true, reactjs: false, reactnative: false, flutter: false },
       capacity_ckp: 22,
       capacity_otros: 44,
@@ -71,6 +75,7 @@ const DEFAULT_DATA = {
       name: "Joseph Rafael Montenegro",
       zoho_zpuid: "5125000023057263",
       email: "rafael.montenegro@cuatroochenta.com",
+      permanent: true,
       skills: { sql: false, net45: true, android: true, reactjs: false, reactnative: false, flutter: false },
       capacity_ckp: 75,
       capacity_otros: 75,
@@ -169,10 +174,19 @@ const planEndDate = (plan) => {
 /*  STORAGE                                                   */
 /* ────────────────────────────────────────────────────────── */
 
+const PERMANENT_IDS = new Set(["ricardo", "eduardo", "joseph"]);
+
 const loadData = async () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const d = JSON.parse(raw);
+      // Migration: ensure original 3 programmers are marked permanent
+      d.programmers = d.programmers.map((p) =>
+        PERMANENT_IDS.has(p.id) ? { ...p, permanent: true } : p
+      );
+      return d;
+    }
   } catch (e) {
     /* fallback to default */
   }
@@ -272,6 +286,10 @@ const Pill = ({ children, color = C.green }) => (
 const ParametrosScreen = ({ data, setData }) => {
   const [savedAt, setSavedAt] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editDraft, setEditDraft] = useState({});
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newDraft, setNewDraft] = useState({ name: "", email: "", zoho_zpuid: "" });
 
   const updateProgrammer = (id, patch) => {
     setData({
@@ -283,6 +301,45 @@ const ParametrosScreen = ({ data, setData }) => {
   const toggleSkill = (id, skillKey) => {
     const p = data.programmers.find((x) => x.id === id);
     updateProgrammer(id, { skills: { ...p.skills, [skillKey]: !p.skills[skillKey] } });
+  };
+
+  const startEdit = (p) => {
+    setEditingId(p.id);
+    setEditDraft({ name: p.name, email: p.email || "", zoho_zpuid: p.zoho_zpuid || "" });
+  };
+
+  const saveEdit = (id) => {
+    if (!editDraft.name.trim()) return;
+    updateProgrammer(id, {
+      name: editDraft.name.trim(),
+      email: editDraft.email.trim(),
+      zoho_zpuid: editDraft.zoho_zpuid.trim(),
+    });
+    setEditingId(null);
+  };
+
+  const cancelEdit = () => setEditingId(null);
+
+  const deleteProgrammer = (id) => {
+    if (!confirm("¿Eliminar este programador?")) return;
+    setData({ ...data, programmers: data.programmers.filter((p) => p.id !== id) });
+  };
+
+  const addProgrammer = () => {
+    if (!newDraft.name.trim()) return;
+    const newP = {
+      id: `p_${Date.now()}`,
+      name: newDraft.name.trim(),
+      email: newDraft.email.trim(),
+      zoho_zpuid: newDraft.zoho_zpuid.trim(),
+      permanent: false,
+      skills: Object.fromEntries(SKILLS.map((s) => [s.key, false])),
+      capacity_ckp: 0,
+      capacity_otros: 0,
+    };
+    setData({ ...data, programmers: [...data.programmers, newP] });
+    setNewDraft({ name: "", email: "", zoho_zpuid: "" });
+    setShowAddForm(false);
   };
 
   const handleSave = async () => {
@@ -358,19 +415,53 @@ const ParametrosScreen = ({ data, setData }) => {
                     )}
                   </th>
                 ))}
+                <th className="px-3 py-3" />
               </tr>
             </thead>
             <tbody>
               {data.programmers.map((p) => (
                 <tr key={p.id} className="border-t" style={{ borderColor: C.border }}>
-                  <td className="px-6 py-3">
-                    <div className="font-medium" style={{ color: C.ink }}>
-                      {p.name}
-                    </div>
-                    <div className="text-xs flex items-center gap-2 mt-0.5" style={{ color: C.mute }}>
-                      <span className="font-mono">zpuid: {p.zoho_zpuid}</span>
-                    </div>
-                  </td>
+                  {editingId === p.id ? (
+                    <td className="px-4 py-2">
+                      <div className="space-y-1.5">
+                        <input
+                          value={editDraft.name}
+                          onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })}
+                          placeholder="Nombre"
+                          className="w-full px-2 py-1 rounded border text-sm"
+                          style={{ borderColor: C.border, color: C.ink }}
+                        />
+                        <input
+                          value={editDraft.email}
+                          onChange={(e) => setEditDraft({ ...editDraft, email: e.target.value })}
+                          placeholder="Email"
+                          className="w-full px-2 py-1 rounded border text-xs font-mono"
+                          style={{ borderColor: C.border, color: C.ink }}
+                        />
+                        <input
+                          value={editDraft.zoho_zpuid}
+                          onChange={(e) => setEditDraft({ ...editDraft, zoho_zpuid: e.target.value })}
+                          placeholder="zpuid"
+                          className="w-full px-2 py-1 rounded border text-xs font-mono"
+                          style={{ borderColor: C.border, color: C.ink }}
+                        />
+                      </div>
+                    </td>
+                  ) : (
+                    <td className="px-6 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium" style={{ color: C.ink }}>{p.name}</span>
+                        {!p.permanent && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ background: C.greenSoft, color: C.mute }}>
+                            inmediato
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs mt-0.5 font-mono" style={{ color: C.mute }}>
+                        zpuid: {p.zoho_zpuid || "—"}
+                      </div>
+                    </td>
+                  )}
                   {SKILLS.map((s) => (
                     <td key={s.key} className="px-3 py-3 text-center">
                       <button
@@ -385,8 +476,105 @@ const ParametrosScreen = ({ data, setData }) => {
                       </button>
                     </td>
                   ))}
+                  <td className="px-3 py-3">
+                    <div className="flex items-center gap-1 justify-end">
+                      {editingId === p.id ? (
+                        <>
+                          <button
+                            onClick={() => saveEdit(p.id)}
+                            title="Confirmar"
+                            className="w-7 h-7 rounded flex items-center justify-center"
+                            style={{ background: C.green, color: "white" }}
+                          >
+                            <Check size={13} strokeWidth={3} />
+                          </button>
+                          <button
+                            onClick={cancelEdit}
+                            title="Cancelar"
+                            className="w-7 h-7 rounded flex items-center justify-center"
+                            style={{ background: C.bg, color: C.mute, border: `1px solid ${C.border}` }}
+                          >
+                            <X size={13} />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => startEdit(p)}
+                            title="Editar"
+                            className="w-7 h-7 rounded flex items-center justify-center"
+                            style={{ background: C.bg, color: C.mute, border: `1px solid ${C.border}` }}
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          {!p.permanent && (
+                            <button
+                              onClick={() => deleteProgrammer(p.id)}
+                              title="Eliminar"
+                              className="w-7 h-7 rounded flex items-center justify-center"
+                              style={{ background: "#FEE2E2", color: C.danger, border: "1px solid #FECACA" }}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
+              {showAddForm && (
+                <tr className="border-t" style={{ borderColor: C.border, background: C.greenSoft }}>
+                  <td className="px-4 py-2">
+                    <div className="space-y-1.5">
+                      <input
+                        value={newDraft.name}
+                        onChange={(e) => setNewDraft({ ...newDraft, name: e.target.value })}
+                        placeholder="Nombre *"
+                        className="w-full px-2 py-1 rounded border text-sm"
+                        style={{ borderColor: C.greenLine, color: C.ink }}
+                      />
+                      <input
+                        value={newDraft.email}
+                        onChange={(e) => setNewDraft({ ...newDraft, email: e.target.value })}
+                        placeholder="Email (opcional)"
+                        className="w-full px-2 py-1 rounded border text-xs font-mono"
+                        style={{ borderColor: C.greenLine, color: C.ink }}
+                      />
+                      <input
+                        value={newDraft.zoho_zpuid}
+                        onChange={(e) => setNewDraft({ ...newDraft, zoho_zpuid: e.target.value })}
+                        placeholder="zpuid (opcional)"
+                        className="w-full px-2 py-1 rounded border text-xs font-mono"
+                        style={{ borderColor: C.greenLine, color: C.ink }}
+                      />
+                    </div>
+                  </td>
+                  {SKILLS.map((s) => (
+                    <td key={s.key} className="px-3 py-3 text-center text-xs" style={{ color: C.mute }}>—</td>
+                  ))}
+                  <td className="px-3 py-3">
+                    <div className="flex items-center gap-1 justify-end">
+                      <button
+                        onClick={addProgrammer}
+                        title="Confirmar"
+                        className="w-7 h-7 rounded flex items-center justify-center"
+                        style={{ background: C.green, color: "white" }}
+                      >
+                        <Check size={13} strokeWidth={3} />
+                      </button>
+                      <button
+                        onClick={() => { setShowAddForm(false); setNewDraft({ name: "", email: "", zoho_zpuid: "" }); }}
+                        title="Cancelar"
+                        className="w-7 h-7 rounded flex items-center justify-center"
+                        style={{ background: C.bg, color: C.mute, border: `1px solid ${C.border}` }}
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )}
               <tr style={{ background: C.bg }}>
                 <td className="px-6 py-3 font-medium text-xs uppercase tracking-wide" style={{ color: C.mute }}>
                   Bus factor
@@ -402,13 +590,23 @@ const ParametrosScreen = ({ data, setData }) => {
                     </td>
                   );
                 })}
+                <td />
               </tr>
             </tbody>
           </table>
         </div>
 
-        <div className="px-6 py-3 border-t text-xs italic" style={{ borderColor: C.border, color: C.mute }}>
-          *Externalizado, sólo para mantenimiento – supervisión.
+        <div className="px-6 py-3 border-t flex items-center justify-between" style={{ borderColor: C.border }}>
+          <span className="text-xs italic" style={{ color: C.mute }}>*Externalizado, sólo para mantenimiento – supervisión.</span>
+          {!showAddForm && (
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg"
+              style={{ background: C.greenSoft, color: C.greenDark, border: `1px solid ${C.greenLine}` }}
+            >
+              <Plus size={13} /> Añadir programador
+            </button>
+          )}
         </div>
       </Card>
 
@@ -444,6 +642,7 @@ const ParametrosScreen = ({ data, setData }) => {
                 <th className="px-3 py-3 font-medium text-center" style={{ color: C.mute }}>
                   Resto de proyectos
                 </th>
+                <th className="px-3 py-3" />
               </tr>
             </thead>
             <tbody>
@@ -481,6 +680,18 @@ const ParametrosScreen = ({ data, setData }) => {
                     <span className="ml-1.5 text-xs" style={{ color: C.mute }}>
                       h
                     </span>
+                  </td>
+                  <td className="px-3 py-3 text-center">
+                    {!p.permanent && (
+                      <button
+                        onClick={() => deleteProgrammer(p.id)}
+                        title="Eliminar"
+                        className="w-7 h-7 rounded flex items-center justify-center mx-auto"
+                        style={{ background: "#FEE2E2", color: C.danger, border: "1px solid #FECACA" }}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -556,18 +767,25 @@ const CalculadoraScreen = ({ data }) => {
     const byProgrammer = {};
 
     try {
-      // Fetch in parallel for all eligible programmers
-      const promises = eligibleProgrammers.map(async (p) => {
+      // Permanent programmers get queried in Zoho; others start immediately
+      const zohoGroup = eligibleProgrammers.filter((p) => p.permanent === true);
+      const immediateGroup = eligibleProgrammers.filter((p) => p.permanent !== true);
+
+      const promises = zohoGroup.map(async (p) => {
         try {
           const r = await fetchOpenTasksForProgrammer(p.email);
-          return { programmer: p, tasks: r.tasks || [], error: null };
+          return { programmer: p, tasks: r.tasks || [], error: null, immediate: false };
         } catch (e) {
-          return { programmer: p, tasks: [], error: e.message };
+          return { programmer: p, tasks: [], error: e.message, immediate: false };
         }
       });
       const fetched = await Promise.all(promises);
+      const allResults = [
+        ...fetched,
+        ...immediateGroup.map((p) => ({ programmer: p, tasks: [], error: null, immediate: true })),
+      ];
 
-      for (const { programmer, tasks, error } of fetched) {
+      for (const { programmer, tasks, error, immediate } of allResults) {
         const cap = monthlyHours(programmer, isCkp);
 
         // Find latest end_date among in-progress tasks (= when programmer frees up)
@@ -579,9 +797,9 @@ const CalculadoraScreen = ({ data }) => {
           if (!latestEnd || d > latestEnd) latestEnd = d;
         }
 
-        // Start: max(today, latestEnd + 1 day)
+        // Immediate programmers always start today; others wait for their last task to end
         let startDate = today;
-        if (latestEnd && latestEnd >= today) {
+        if (!immediate && latestEnd && latestEnd >= today) {
           startDate = new Date(latestEnd);
           startDate.setDate(startDate.getDate() + 1);
         }
@@ -593,6 +811,7 @@ const CalculadoraScreen = ({ data }) => {
           programmer,
           tasks,
           error,
+          immediate,
           monthlyCap: cap,
           startDate,
           latestEnd,
@@ -869,7 +1088,7 @@ const Metric = ({ label, value, highlight = false }) => (
 );
 
 const ProgrammerCard = ({ result, isBest }) => {
-  const { programmer, plan, startDate, latestEnd, endDate, monthlyCap, openTaskCount, error } = result;
+  const { programmer, plan, startDate, latestEnd, endDate, monthlyCap, openTaskCount, error, immediate } = result;
 
   const chartData = plan.map((p, i) => ({
     name: fmtMonth(p.monthDate),
@@ -921,7 +1140,7 @@ const ProgrammerCard = ({ result, isBest }) => {
       </div>
 
       <div className="p-5">
-        {error ? (
+        {error && (
           <div
             className="flex gap-2 px-3 py-2 rounded-lg text-xs mb-3"
             style={{ background: "#FEF3C7", color: "#92400E" }}
@@ -929,13 +1148,22 @@ const ProgrammerCard = ({ result, isBest }) => {
             <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
             <span>No se pudieron cargar las tareas en curso de Zoho ({error}). Estimación basada en disponibilidad inmediata.</span>
           </div>
-        ) : null}
+        )}
+        {immediate && (
+          <div
+            className="flex gap-2 px-3 py-2 rounded-lg text-xs mb-3"
+            style={{ background: C.greenSoft, color: C.greenDark }}
+          >
+            <CheckCircle2 size={14} className="flex-shrink-0 mt-0.5" />
+            <span>Disponibilidad inmediata — no se consultan tareas en Zoho.</span>
+          </div>
+        )}
 
         <div className="grid grid-cols-3 gap-3 mb-4">
           <SmallStat
-            label="Tareas en curso"
-            value={openTaskCount}
-            sub={openTaskCount === 0 ? "libre ahora" : "en Zoho"}
+            label={immediate ? "Disponibilidad" : "Tareas en curso"}
+            value={immediate ? "Inmediata" : openTaskCount}
+            sub={immediate ? "arranca hoy" : openTaskCount === 0 ? "libre ahora" : "en Zoho"}
           />
           <SmallStat
             label="Disponible desde"

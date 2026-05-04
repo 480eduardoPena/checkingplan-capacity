@@ -24,11 +24,12 @@
  */
 import express from "express";
 import cors from "cors";
-import "dotenv/config";
+import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: join(__dirname, ".env") });
 const DIST = join(__dirname, "../dist");
 
 const app = express();
@@ -86,34 +87,60 @@ function mockTasks(email) {
   const today = new Date();
   const future = (n) =>
     new Date(today.getTime() + n * 86_400_000).toISOString().slice(0, 10);
+  const past = (n) =>
+    new Date(today.getTime() - n * 86_400_000).toISOString().slice(0, 10);
 
   const fixtures = {
     "eduardo.pena@cuatroochenta.com": [
       {
         name: "Refactor reporting CKP",
         end_date: future(8),
+        start_date: past(5),
         project: "CHECKINGPLAN PRODUCTO",
+        project_id: "3000093879",
+        id: "3000178921",
         total_work: "08:00",
+        status: "En curso",
+        completion_percentage: 50,
+        priority: "high",
       },
       {
         name: "Modificación informe 28 Vodafone",
         end_date: future(20),
+        start_date: past(2),
         project: "10S-6109 FCC VODAFONE",
+        project_id: "3000093881",
+        id: "3000178922",
         total_work: "06:00",
+        status: "Pendiente",
+        completion_percentage: 0,
+        priority: "medium",
       },
     ],
     "ricardo.cruz@cuatroochenta.com": [
       {
         name: "Migración módulo de cuestionarios",
         end_date: future(15),
+        start_date: past(10),
         project: "CHECKINGPLAN PRODUCTO",
+        project_id: "3000093879",
+        id: "3000178923",
         total_work: "12:00",
+        status: "En curso",
+        completion_percentage: 75,
+        priority: "high",
       },
     ],
     "rafael.montenegro@cuatroochenta.com": [],
   };
 
   return fixtures[email.toLowerCase()] || [];
+}
+
+function hasWork(totalWork) {
+  if (!totalWork) return false;
+  const [h, m] = String(totalWork).split(":").map(Number);
+  return (h || 0) + (m || 0) > 0;
 }
 
 /* ---------- Real Zoho call ---------- */
@@ -155,25 +182,43 @@ async function fetchZohoTasks(email) {
     throw e;
   }
 
-  // Keep only tasks in "Pendiente" (open) or "En curso" (inprogress) status.
-  // status.type is a system field independent of the portal language.
-  const ACTIVE_TYPES = new Set(["open", "inprogress"]);
+  // Keep only tasks whose status name is exactly "Pendiente" or "En curso".
+  const ACTIVE_STATUSES = new Set(["pendiente", "en curso"]);
+  // Projects excluded from capacity calculations (e.g. absence tracking).
+  const EXCLUDED_PROJECTS = new Set(["ausencias checkingplan"]);
 
   const lower = email.toLowerCase();
   return (j.tasks || [])
     .filter((t) => {
-      const statusType = (t?.status?.type || "").toLowerCase();
-      if (!ACTIVE_TYPES.has(statusType)) return false;
+      const statusName = (t?.status?.name || "").toLowerCase();
+      if (!ACTIVE_STATUSES.has(statusName)) return false;
+      const projectName = (t?.project?.name || "").toLowerCase();
+      if (EXCLUDED_PROJECTS.has(projectName)) return false;
+      if (!hasWork(t?.owners_and_work?.total_work)) return false;
       return (t?.owners_and_work?.owners || []).some(
         (o) => (o.email || "").toLowerCase() === lower
       );
     })
-    .map((t) => ({
-      name: t.name || "",
-      end_date: t.end_date ? String(t.end_date).slice(0, 10) : null,
-      project: t?.project?.name || "",
-      total_work: t?.owners_and_work?.total_work || null,
-    }));
+    .map((t) => {
+      if (process.env.DEBUG_ZOHO === "1") {
+        console.log("[zoho task sample]", JSON.stringify({
+          id: t.id, id_string: t.id_string, name: t.name,
+          project: t?.project,
+        }, null, 2));
+      }
+      return {
+        name: t.name || "",
+        end_date: t.end_date ? String(t.end_date).slice(0, 10) : null,
+        start_date: t.start_date ? String(t.start_date).slice(0, 10) : null,
+        project: t?.project?.name || "",
+        project_id: String(t?.project?.id_string || t?.project?.id || ""),
+        id: String(t.id_string || t.id || ""),
+        total_work: t?.owners_and_work?.total_work || null,
+        status: t?.status?.name || "",
+        completion_percentage: Number(t.completion_percentage) || 0,
+        priority: (t.priority || "none").toLowerCase(),
+      };
+    });
 }
 
 /* ---------- Routes ---------- */
